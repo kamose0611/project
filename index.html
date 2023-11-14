@@ -1,39 +1,70 @@
 <!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-　　<!-- vue.js　-->
-    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
-    <link rel="manifest" href="manifest.json">
-    <title>PWA Sample</title>
-  </head>
-  <body>
-    <div id="app">
-        <p>冷蔵庫の残量</p>
-        <button v-on:click="reverseMessage">Reverse Message</button>
-     </div>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Recognition</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+</head>
+<body>
+    <h1>Food Recognition</h1>
+    <video id="webcam" width="640" height="480"></video>
+    <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
+    <div id="prediction"></div>
+
     <script>
-    // service workerの登録関係
-    if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service_worker.js').then(function(registration) {
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-    }).catch(function(err) {
-        console.log('ServiceWorker registration failed: ', err);
-    });
-    }
-    // vue.jsの設定関係
-    var app = new Vue({
-      el: '#app',
-      data: {
-        message: 'Hello Vue!'
-      },
-      methods: {
-        reverseMessage: function () {
-          this.message = this.message.split('').reverse().join('')
+        async function setupCamera() {
+            const video = document.getElementById('webcam');
+            const stream = await navigator.mediaDevices.getUserMedia({ 'video': true });
+            video.srcObject = stream;
+
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    resolve(video);
+                };
+            });
         }
-      }
-    });
+
+        async function loadModel() {
+            return await mobilenet.load();
+        }
+
+        async function predictFood(model, video) {
+            const imageCapture = new ImageCapture(video.srcObject.getVideoTracks()[0]);
+            const imageBitmap = await imageCapture.grabFrame();
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+            context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+            const input = tf.browser.fromPixels(canvas);
+            const predictions = await model.classify(input);
+
+            return predictions;
+        }
+
+        async function main() {
+            const video = await setupCamera();
+            const model = await loadModel();
+
+            setInterval(async () => {
+                const predictions = await predictFood(model, video);
+                displayPredictions(predictions);
+            }, 1000); // 1秒ごとに予測
+
+        }
+
+        function displayPredictions(predictions) {
+            const predictionDiv = document.getElementById('prediction');
+            predictionDiv.innerHTML = '';
+            predictions.forEach(({ className, probability }) => {
+                const percentage = Math.round(probability * 100);
+                const predictionItem = document.createElement('div');
+                predictionItem.innerHTML = `${className}: ${percentage}%`;
+                predictionDiv.appendChild(predictionItem);
+            });
+        }
+
+        main();
     </script>
-  </body>
+</body>
 </html>
